@@ -84,6 +84,31 @@ class CorrosionData:
 
                 return data_avg
 
+        def Compute_1dAverages(self, time_name = 'Date-Time'):
+
+                # Konwersja kolumny Date-Time do datetime, jeśli jeszcze nie jest w tym formacie
+                self._data['Date-Time'] = pd.to_datetime(self._data['Date-Time'])
+
+                # Szukamy pierwszego rekordu między 07:00 a 08:00
+                mask_first = (self._data['Date-Time'].dt.hour >= 7) & (self._data['Date-Time'].dt.hour < 8)
+                first_valid_time = self._data.loc[mask_first, 'Date-Time'].min() if mask_first.any() else self._data[
+                        'Date-Time'].min()
+
+                # Szukamy ostatniego rekordu między 06:00 a 07:00
+                mask_last = (self._data['Date-Time'].dt.hour >= 6) & (self._data['Date-Time'].dt.hour < 7)
+                last_valid_time = self._data.loc[mask_last, 'Date-Time'].max() if mask_last.any() else self._data[
+                        'Date-Time'].max()
+                data_avg = self._data.copy()
+                # Przycinanie danych do zakresu [first_valid_time, last_valid_time]
+                data_avg = data_avg[
+                        (data_avg['Date-Time'] >= first_valid_time) & (data_avg['Date-Time'] <= last_valid_time)]
+
+                data_avg['Date-Time'] = self._data['Date-Time'].dt.strftime('%H:%M')
+                data_avg['Date-Time'] = data_avg['Date-Time'].dt.hour
+                data_avg = data_avg.groupby(data_avg['Date-Time'])
+
+
+
 
 
         def plot_parameters(self, data, x_param_name: str, y_params: list[str] = None) -> None:
@@ -152,6 +177,8 @@ def main():
                 print(f'index: {i}, name: {name}')
         print(data_obj.column_names)
 
+        data_obj.Compute_1dAverages('Date-Time')
+
 
         data_avg = data_obj.Compute_DailyAverages()
         data_obj_avg = CorrosionData(data=data_avg)
@@ -166,7 +193,7 @@ def main():
 
         analyzer_obj = Analyzer(data_selected)
         cor = analyzer_obj.find_correlations()
-        print(cor)
+
 
 
 if __name__ == '__main__':
