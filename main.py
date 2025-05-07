@@ -142,6 +142,7 @@ class CorrosionData:
                 y = y.tolist()
 
                 return x, y
+
         def make_lists(self, x, y):
                 x = np.asarray(x)
                 y = np.asarray(y)
@@ -177,7 +178,9 @@ class CorrosionData:
                         plt.scatter(column_x, column_y, label = y_label, marker = 'o')
                         if trend_line is True:
                                 try:
+
                                         trend_eq = self.plot_Trend(column_x, column_y)
+
                                         plt.plot(column_x, trend_eq(column_x), linestyle= '-.', label = f'Trend Line of {y_label}')
                                 except Exception as e:
                                         print(f'Error when computing trend line: {e}.\nThis behavior is normal for irregular data')
@@ -249,8 +252,8 @@ def main():
         #                                                    'Galv Corr Mass Loss Rate (g/m-a)', 'Free Corr Mass Loss Rate (g/m-a)',
         #                                                    'Tot Galv Corr Mass Loss Rate (g/m-a)', 'Tot Free Corr Mass Loss Rate (g/m-a)2'])
         print(data_obj_avg.column_names)
-        data_obj_avg.plot_parameters(x_param_name = 'Air Temp (C)', y_params=['RH (%)'],
-                                     trend_line=True)
+        data_obj_avg.plot_parameters(x_param_name = 'Air Temp (C)', y_params=['Surface Temp (C)'],
+                                     trend_line=True, sort_x=False)
 
         analyzer_obj = Analyzer(data_obj_avg.select_byColumnNames(['Air Temp (C)', 'RH (%)', 'Surface Temp (C)',
                                                                    'Tot Cond Lo Freq (C/V)', 'Tot Cond Hi Freq (C/V)',
