@@ -6,13 +6,6 @@ import seaborn as sns
 
 class CorrosionData:
         def __init__(self, path: 'str' = None, data: pd.DataFrame = None) -> None:
-                self._data = data
-                if data is None:
-                        self.path = pth.Path(path)
-                elif data is None and path is None:
-                        raise ValueError('Both data and path are empty!')
-
-
                 self._data_filtered = None
 
                 self._column_names  = ['Unix Time (s)', 'Test Time (h)', 'Air Temp (C)', 'RH (%)',
@@ -23,6 +16,19 @@ class CorrosionData:
                         'free_corrosion': 17.7059,
                         'galvanic_corrosion': 21.661
                 }
+
+
+                self._data = data
+                if data is None and path is not None:
+                        self.path = pth.Path(path)
+                        self._data = self.loadData()
+                elif data is not None:
+                        self._data.dropna()
+                elif data is None and path is None:
+                        raise ValueError('Both data and path are empty!')
+
+
+
 
         def loadData(self) -> pd.DataFrame:
                 if self._data is None:
@@ -35,6 +41,7 @@ class CorrosionData:
                 self._convertTime()
                 self._convert2numeric()
 
+                self._data.dropna()
                 return self._data
 
         @property
@@ -55,11 +62,14 @@ class CorrosionData:
 
         def _convertTime(self) -> pd.DataFrame:
                 if 'Unix Time (s)' in self._data.columns:
+                        self._data['Unix Time (s)'] = pd.to_numeric(self._data['Unix Time (s)'])
                         self._data['Unix Time (s)'] = pd.to_datetime(self._data['Unix Time (s)'], unit='s')
                         self._data = self._data.rename(columns={'Unix Time (s)': 'Date-Time'})
 
                 return self._data
 
+
+        # TE FUNKCJE SĄ DO UŻYCIA W NOWYM KODZIE
         def limit_byDateTime(self, date: list[str]) -> pd.DataFrame:
                 target_date = pd.to_datetime(date)
                 self._data['Date-Time'] = pd.to_datetime(self._data['Date-Time'])
@@ -78,12 +88,12 @@ class CorrosionData:
 
         def Compute_DailyAverages(self, time_name = 'Date-Time'):
 
-                non_time_cols = self._data.iloc[:, 2:]
-                non_time_cols = non_time_cols.columns
-                data_avg = pd.DataFrame(self._data.groupby(self._data[time_name].dt.date)[non_time_cols].mean())
-                data_time = pd.Series(self._data[time_name].groupby(self.data[time_name].dt.date), name=time_name)
 
-                data_avg = pd.concat([data_time, data_avg], axis=1)
+                non_time_cols = self._data.iloc[:, 2:]
+                non_time_col_names= non_time_cols.columns
+
+                data_avg = non_time_cols.groupby(self._data['Date-Time'].dt.date).mean()
+
 
                 return data_avg
 
@@ -122,8 +132,7 @@ class CorrosionData:
 
                 return data_avg
 
-        def plot_Trend(self, x: np.array, y: np.array, poly_order: int = 3) -> object:
-                x, y = self.sort_cols(x, y)
+        def plot_Trend(self, x: np.array, y: np.array, poly_order: int = 4) -> object:
                 # Fit a linear trend line (1st-degree polynomial)
                 coeffs = np.polyfit(x, y, poly_order)  # Linear fit
                 trend_line = np.poly1d(coeffs)
@@ -178,7 +187,6 @@ class CorrosionData:
                         plt.scatter(column_x, column_y, label = y_label, marker = 'o')
                         if trend_line is True:
                                 try:
-
                                         trend_eq = self.plot_Trend(column_x, column_y)
 
                                         plt.plot(column_x, trend_eq(column_x), linestyle= '-.', label = f'Trend Line of {y_label}')
@@ -210,39 +218,33 @@ class Analyzer:
 
 def loadRawData(path):
         data_obj = CorrosionData(path=path)
-        data_obj.loadData()
-        data_obj.add_NewColumn(column2apply='Galv Corr 1 (A)',
-                               new_column_name='Galv Corr Mass Loss Rate (g/m-a)',
-                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
-
-        data_obj.add_NewColumn(column2apply='Galv Corr 2 (A)',
-                               new_column_name='Free Corr Mass Loss Rate (g/m-a)',
-                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
-
-        data_obj.add_NewColumn(column2apply='Tot Galv Corr 1 (C)',
-                               new_column_name='Tot Galv Corr Mass Loss Rate (g/m-a)',
-                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
-
-        data_obj.add_NewColumn(column2apply='Tot Galv Corr 2 (C)',
-                               new_column_name='Tot Free Corr Mass Loss Rate (g/m-a)2',
-                               func=lambda x: x * data_obj.coeffs['free_corrosion'])
-
-        print('--- COLUMN NAMES ---\n')
-        for i, name in enumerate(data_obj.column_names):
-                print(f'index: {i}, name: {name}')
-        print(data_obj.column_names)
-
         return data_obj
+
 
 
 def main():
         path = 'Acuity_LS_00833_20250226_102627.csv'
         data_obj = loadRawData(path)
 
-        data_avg = data_obj.Compute_1dAverages()
-        data_avg = data_obj.Compute_DailyAverages()
+        data_obj.add_NewColumn(column2apply='Galv Corr 1 (A)',
+                               new_column_name='Galv Corr Mass Loss Rate (g/m-a)',
+                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
+
+        data_obj.add_NewColumn(column2apply='Tot Galv Corr 1 (C)',
+                               new_column_name='Tot Galv Corr Mass Loss Rate (g/m-a)',
+                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
+
+
+        print('--- COLUMN NAMES ---\n')
+        for i, name in enumerate(data_obj.column_names):
+                print(f'index: {i}, name: {name}')
+
+
+        data_avg = data_obj.Compute_1dAverages() # all data shown as one average day
+        data_avg = data_obj.Compute_DailyAverages() # each day averaged to a single data point
 
         data_obj_avg = CorrosionData(data=data_avg)
+        print(data_obj_avg.data)
 
         # data_selected = data_obj_avg.select_byColumnNames(['Air Temp (C)', 'RH (%)', 'Surface Temp (C)',
         #                                                    'Cond Lo Freq (S)', 'Cond Hi Freq (S)',
@@ -251,15 +253,16 @@ def main():
         #                                                    'Tot Galv Corr 1 (C)', 'Tot Galv Corr 2 (C)',
         #                                                    'Galv Corr Mass Loss Rate (g/m-a)', 'Free Corr Mass Loss Rate (g/m-a)',
         #                                                    'Tot Galv Corr Mass Loss Rate (g/m-a)', 'Tot Free Corr Mass Loss Rate (g/m-a)2'])
-        print(data_obj_avg.column_names)
+
+
         data_obj_avg.plot_parameters(x_param_name = 'Air Temp (C)', y_params=['Surface Temp (C)'],
-                                     trend_line=True, sort_x=False)
+                                     trend_line=True, sort_x=True)
 
         analyzer_obj = Analyzer(data_obj_avg.select_byColumnNames(['Air Temp (C)', 'RH (%)', 'Surface Temp (C)',
                                                                    'Tot Cond Lo Freq (C/V)', 'Tot Cond Hi Freq (C/V)',
                                                                    'Tot Galv Corr 1 (C)', 'Tot Galv Corr 2 (C)',
-                                                                   'Galv Corr Mass Loss Rate (g/m-a)', 'Free Corr Mass Loss Rate (g/m-a)',
-                                                                   'Tot Galv Corr Mass Loss Rate (g/m-a)', 'Tot Free Corr Mass Loss Rate (g/m-a)2']))
+                                                                   'Galv Corr Mass Loss Rate (g/m-a)',
+                                                                   'Tot Galv Corr Mass Loss Rate (g/m-a)']))
         cor = analyzer_obj.find_correlations()
 
 
