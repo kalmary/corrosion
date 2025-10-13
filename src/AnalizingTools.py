@@ -1,3 +1,5 @@
+from typing import Union, Optional
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,7 +13,7 @@ import seaborn as sns
 
 
 class CorrosionData:
-    def __init__(self, path: 'str' = None, column_names=None, data: pd.DataFrame = None) -> None:
+    def __init__(self, path: Optional[Union[str, pth.Path]], column_names: Optional[list[str]], data: Optional[pd.DataFrame]) -> None:
         self._data_filtered = None
 
         self._column_names = column_names
@@ -22,22 +24,24 @@ class CorrosionData:
         }
 
         self._data = data
-        if data is None and path is not None:
-            self.path = pth.Path(path)
-            self._data = self.loadData()
-        elif data is not None:
+        if data is not None:
+            self._data = data
             self._data.dropna()
+        elif data is None and path is not None:
+            self._data = self.loadData(path)
         elif data is None and path is None:
             raise ValueError('Both data and path are empty!')
 
-    def loadData(self) -> pd.DataFrame:
+    def loadData(self, path) -> pd.DataFrame:
         if self._data is None:
-            if not self.path.exists():
-                raise FileNotFoundError(f'File {self.path} does not exist')
-            self._data = pd.read_csv(self.path, header=None)
+            if not path.exists():
+                raise FileNotFoundError(f'File {path} does not exist')
+            self._data = pd.read_csv(path, header=None)
             self._data = self._data.iloc[1:, :]
 
-        self._data.columns = self._column_names
+        if self._column_names is not None:
+            self._data.columns = self._column_names
+            
         self._convertTime()
         self._convert2numeric()
 
