@@ -1,4 +1,5 @@
-from AnalizingTools import CorrosionData, Analyzer
+from src.AnalizingTools import CorrosionData, Analyzer
+import argparse
 
 def loadRawData(path):
         column_names = ['Unix Time (s)', 'Test Time (h)', 'Air Temp (C)', 'RH (%)',
@@ -12,7 +13,7 @@ def loadRawData(path):
 
 
 
-def main():
+def plot():
         path = 'Acuity_LS_00833_20250226_102627.csv'
         """
         Wczytanie danych jako DataFrame i stworzenie z nich obiektu data_obj. 
@@ -104,6 +105,26 @@ def main():
         dodatkowo metoda zwraca tekstową formę macierzy
         """
         cor = analyzer_obj.find_correlations()
+
+def argparser():
+        parser = argparse.ArgumentParser(
+        description="Script for training the model based on predefined range of scenarios",
+        formatter_class=argparse.RawTextHelpFormatter
+        )
+
+        parser.add_argument('-p', '--path', type=str, help='Path to the data file')
+        args = parser.parse_args()
+
+        parser.add_argument(
+        '--path',
+        type=str,
+        help=(
+            'Absolute path to the data file')
+        )
+
+
+        return args
+
 
 
 
