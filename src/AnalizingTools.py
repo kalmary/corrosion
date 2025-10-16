@@ -84,6 +84,8 @@ class CorrosionData:
     def select_byColumnNames(self, column_names: list[str]) -> pd.DataFrame:
         data_filtered = self._data[column_names]
 
+        self._data = data_filtered
+
         return data_filtered
 
     def add_NewColumn(self, column2apply: str, new_column_name: str, func):
@@ -97,9 +99,11 @@ class CorrosionData:
 
         data_avg = non_time_cols.groupby(self._data['Date-Time'].dt.date).mean()
 
+        self._data = data_avg
+
         return data_avg
 
-    def Compute_1dAverages(self, time_name='Date-Time'):
+    def Compute_OneDayAverage(self, time_name='Date-Time'):
 
         # Konwersja kolumny Date-Time do datetime, jeśli jeszcze nie jest w tym formacie
         self._data['Date-Time'] = pd.to_datetime(self._data['Date-Time'])
@@ -129,6 +133,8 @@ class CorrosionData:
         data_avg = data_avg.rename(columns={'Date-Time': 'Hour'})
 
         data_avg = data_avg.drop(columns=['Test Time (h)'])
+
+        self._data = data_avg
 
         return data_avg
 
@@ -199,7 +205,7 @@ class CorrosionData:
         plt.show()
 
 
-class Analyzer:
+class VisualizeData:
     def __init__(self, data: pd.DataFrame) -> None:
         self.data = data
 

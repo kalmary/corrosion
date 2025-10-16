@@ -17,6 +17,8 @@ def loadRawData(path: Union[str, pth.Path]) -> CorrosionData:
                               'Tot Cond Hi Freq (C/V)', 'Tot Galv Corr 1 (C)', 'Tot Galv Corr 2 (C)']
 
         data_obj = CorrosionData(path=path, column_names=column_names, data=None)
+        print(f'\nLoaded data from path {path}\n')
+
         return data_obj
 
 
@@ -148,19 +150,6 @@ def argparser():
                 )
         )   
 
-        parser.add_argument(
-                '-m', '--mode',
-                type=int,
-                default=0,
-                choices=[0, 1], # choice limit
-                help=(
-                "Choose mode\n"
-                'Pick:\n'
-                '0: mode0 placehorder\n'
-                '1: mode1 placeholder\n'
-                )
-        )
-
 
         args = parser.parse_args()
         return args
@@ -168,23 +157,84 @@ def argparser():
 def main():
         args = argparser()
         
+        
+
+        print(67*'=')
+        print('Welcome to Corrosion Data Analysis Tool')
+        print("This program helps analyze and visualize corrosion measurement data")
+        print(67*'=')
+
         data_obj = loadRawData(args.path)
 
-        data_obj.add_NewColumn(column2apply='Galv Corr 1 (A)', # add new column based on formula - Galv Corr 1 (A) is x, only one variable for now
-                               new_column_name='Galv Corr Mass Loss Rate (g/m-a)',
-                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
+
+        available_options = {
+                0: 'Load new data from path',
+                1: 'Add new column',
+                2: 'Compute average from every day',
+                3: 'Compute single, average day from data',
+                4: 'Select specific columns',
+                5: 'Plot parameters',
+                6: 'Exit'
+        }
+
+
         
-        data_obj.add_NewColumn(column2apply='Tot Galv Corr 1 (C)',
-                               new_column_name='Tot Galv Corr Mass Loss Rate (g/m-a)',
-                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
 
-        print('\n--- COLUMN NAMES ---\n') # wypisanie nazw kolumn
-        for i, name in enumerate(data_obj.column_names):
-                print(f'index: {i}, name: {name}')
+        while True:
 
-        # more comfy to copy from here
-        print('\n--- COLUMN NAMES (TO COPY PART OF LIST) ---')
-        print(data_obj.column_names) # wypisanie nazw kolumn
+                data_obj.add_NewColumn(column2apply='Galv Corr 1 (A)', # add new column based on formula - Galv Corr 1 (A) is x, only one variable for now
+                        new_column_name='Galv Corr Mass Loss Rate (g/m-a)',
+                        func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
+        
+                data_obj.add_NewColumn(column2apply='Tot Galv Corr 1 (C)',
+                                new_column_name='Tot Galv Corr Mass Loss Rate (g/m-a)',
+                                func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
+
+                print('\n--- COLUMN NAMES ---\n') # wypisanie nazw kolumn
+                for i, name in enumerate(data_obj.column_names):
+                        print(f'index: {i}, name: {name}')
+
+                # more comfy to copy from here
+                print('\n--- COLUMN NAMES (TO COPY PART OF LIST) ---')
+                print(data_obj.column_names) # wypisanie nazw kolumn
+
+                print(20*'=')
+
+                print("Available options:")
+                for key, value in available_options.items():
+                        print(f"{key}: {value}")
+
+                choice = int(input("\nPick option: ").strip())
+
+
+                match choice:
+                        case 0:
+                                path = input('Input new absolute path to data file: ')
+                                data_obj = loadRawData(path)
+                        case 1:
+                                column2apply = input('Input column name (str) to apply formula to: ')
+                                new_column_name = input('Input new column name (str): ')
+                                func = input('Input formula (eg. lambda x: edit this -> function(x), where x is column to apply)')
+
+                                data_obj.add_NewColumn(column2apply, new_column_name, func)
+                        case 2:
+                                data_obj.Compute_DailyAverages()
+                        case 3:
+                                data_obj.Compute_OneDayAverage()
+                        case 4:
+                                column_names = input('Input column names to select: ')
+                                data_obj.select_byColumnNames(column_names)
+                        case 5:
+                                data_obj.plot_parameters()
+                        case 6:
+                                print('Exiting...')
+                                break
+                        case _:
+                                print('Invalid choice. Please try again.')
+                
+
+
+
 
 
 
