@@ -1,10 +1,10 @@
 import pathlib as pth
 import argparse
 from typing import Union, Optional
-
 import pandas as pd
 
-from AnalizingTools import CorrosionData, Analyzer
+from AnalyzingTools import CorrosionData, VisualizeData
+from collections import OrderedDict
 
 
 def loadRawData(path: Union[str, pth.Path]) -> CorrosionData:
@@ -154,6 +154,27 @@ def argparser():
         args = parser.parse_args()
         return args
 
+def _get_plot_params() -> dict:
+        params = OrderedDict()
+        iter = 0
+        
+
+        params = OrderedDict()
+        while True:
+                print(f'ITERATION: {iter}')
+
+                x = input(f'Input x parameter name (leave empty to finish): ').strip()
+                y = input(f'Input y parameter names (comma-separated): ').strip().split(',')
+                params[x] = y
+
+                stop = False if input('Stop? (y/n): ').strip().lower() == 'n' else True
+                
+                if stop:
+                        break
+        return params
+        
+        
+
 def main():
         args = argparser()
         
@@ -173,12 +194,16 @@ def main():
                 2: 'Compute average from every day',
                 3: 'Compute single, average day from data',
                 4: 'Select specific columns',
-                5: 'Plot parameters',
-                6: 'Exit'
+                5: 'Reset data to one thats been loaded from file',
+                6: 'Plot parameters',
+                7: 'Print data table',
+                8: 'Exit'
         }
 
 
         
+        data_obj0 = None
+        visualiser = None
 
         while True:
 
@@ -204,13 +229,18 @@ def main():
                 for key, value in available_options.items():
                         print(f"{key}: {value}")
 
-                choice = int(input("\nPick option: ").strip())
-
+                try:
+                        choice = int(input("\nPick option: ").strip())
+                except Exception as _:
+                        print('Invalid choice (not an integer). Please try again.')
+                        continue
 
                 match choice:
                         case 0:
                                 path = input('Input new absolute path to data file: ')
                                 data_obj = loadRawData(path)
+                                data_obj0 = data_obj.deepcopy()
+
                         case 1:
                                 column2apply = input('Input column name (str) to apply formula to: ')
                                 new_column_name = input('Input new column name (str): ')
@@ -222,11 +252,24 @@ def main():
                         case 3:
                                 data_obj.Compute_OneDayAverage()
                         case 4:
-                                column_names = input('Input column names to select: ')
+                                column_names = input('Input column names to select (list[str]): ')
                                 data_obj.select_byColumnNames(column_names)
                         case 5:
-                                data_obj.plot_parameters()
+                                data_obj = data_obj0.deepcopy()
                         case 6:
+                                visualiser = VisualizeData(data_obj.data, data_obj.path.stem)
+                                params2plot = _get_plot_params()
+
+                                visualiser.plot_parameters(params2plot)
+                                
+                                
+                        case 7:
+                                visualiser = VisualizeData(data_obj.data, data_obj.path.stem)
+                                visualiser.view_dataframe()
+                                
+
+
+                        case 8:
                                 print('Exiting...')
                                 break
                         case _:
