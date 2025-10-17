@@ -3,6 +3,8 @@ import argparse
 from typing import Union, Optional
 import pandas as pd
 
+import ast
+
 from AnalyzingTools import CorrosionData, VisualizeData
 from collections import OrderedDict
 
@@ -20,101 +22,6 @@ def loadRawData(path: Union[str, pth.Path]) -> CorrosionData:
         print(f'\nLoaded data from path {path}\n')
 
         return data_obj
-
-
-
-def plot():
-        path = 'Acuity_LS_00833_20250226_102627.csv'
-        """
-        Wczytanie danych jako DataFrame i stworzenie z nich obiektu data_obj. 
-        data_obj jest jak data_frame (zbiór danych), ale z kilkoma dopisanymi metodami (funckjami). 
-        Metody, których warto używać podczas analiz mają postać data_obj.funkcja(argumenty).
-        Metody o postaci data_obj._funkcja(argumenty) odpowiadają za wewnętrzne działanie kodu. Nie trzeba ich ruszać.
-        
-        Da się "dostać" do danych zawartych w data_obj:
-        data = data_obj.data <- jako data zadeklarujemy DataFrame z funkcjonalnością taką jak w bibliotece pandas
-        
-        alternatywnie te same efekty można uzyskać poprzez:
-        data_obj.data.wybrana_metoda_z_pandas
-        """
-        data_obj = loadRawData(path) #
-        """
-        data_obj.add_NewColumn() dodaje nową kolumnę do datasetu. Dodanie kolumn czasowych będzie wymagało modyfikacji kodu!!!!
-        argumenty:
-        column2apply: Kolumna będąca argumentem do wzoru w func
-        new_column_name: Nazwa nowej kolumny
-        func: funkcja na podstawie której powstaje nowa kolumna
-                Funkcja ma konstrukcję lambda (oznaczenie funkcji) x (argument na której działa funkcja): wzór funkcji(x)
-        """
-        data_obj.add_NewColumn(column2apply='Galv Corr 1 (A)',
-                               new_column_name='Galv Corr Mass Loss Rate (g/m-a)',
-                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
-
-        data_obj.add_NewColumn(column2apply='Tot Galv Corr 1 (C)',
-                               new_column_name='Tot Galv Corr Mass Loss Rate (g/m-a)',
-                               func=lambda x: x * data_obj.coeffs['galvanic_corrosion'])
-
-
-        print('--- COLUMN NAMES ---\n') # wypisanie nazw kolumn
-        for i, name in enumerate(data_obj.column_names):
-                print(f'index: {i}, name: {name}')
-
-        """
-        metoda data_obj.Compute_1dAverages() zwraca nowy data frame, 
-        który zawiera dane uśrednione: powstaje jeden dzień średni dla dni zawartych we wszystkich rekordach
-        """
-        data_avg = data_obj.Compute_DailyAverages()
-        """
-        metoda data_obj.Compute_1dAverages() zwraca nowy data frame, 
-        który zawiera dane uśrednione: każdy dzień jest sprowadzony do jednego punktu pomiarowego - średniej z tego dnia
-        """
-        data_avg = data_obj.Compute_DailyAverages() # each day averaged to a single data point
-
-
-        """
-        powyższe metody zwracają nowy DataFrame (nową "tabelkę z danymi")
-        Żeby dalej je analizować z wykorzystaniem CorrosionData trzeba stworzyć nowy obiekt
-        """
-        data_obj_avg = CorrosionData(data=data_avg)
-        """
-        Da się stworzyć DataFrame tylko z wybranymi kolumnami żeby pracowało się z nimi wygodniej:
-        data_obj_avg.select_byColumnNames zwróci DataFrame z wybranymi nazwami kolumn.
-        Metoda przyjmuje listę nazw kolumn: list[str]
-        """
-        # data_selected = data_obj_avg.select_byColumnNames(['Air Temp (C)', 'RH (%)', 'Surface Temp (C)',
-        #                                                    'Cond Lo Freq (S)', 'Cond Hi Freq (S)',
-        #                                                    'Galv Corr 1 (A)', 'Galv Corr 2 (A)',
-        #                                                    'Tot Cond Lo Freq (C/V)', 'Tot Cond Hi Freq (C/V)',
-        #                                                    'Tot Galv Corr 1 (C)', 'Tot Galv Corr 2 (C)',
-        #                                                    'Galv Corr Mass Loss Rate (g/m-a)', 'Free Corr Mass Loss Rate (g/m-a)',
-        #                                                    'Tot Galv Corr Mass Loss Rate (g/m-a)', 'Tot Free Corr Mass Loss Rate (g/m-a)2'])
-
-
-        """
-        data_obj_avg.plot_parameters() służy do tworzenia wykresów. Wybieramy argument osi x i listę kolumn na osi y 
-        (jeszcze nie da się ustawić kilku osi z oddzielnym skalowaniem :c)
-        trend_line = True: dodatkowo wyrysuje linię trendu (aproksymację wielomianową)
-        sort_x = False: czasami rekordy na osi x mogą zmieniać się w sposób niemonotoniczny i wykres może nie wyjść. 
-        sort_x sortuje wartości kolumn i umożliwia sprawdzenie trendu w zależności argumentów.
-        """
-        data_obj_avg.plot_parameters(x_param_name = 'Air Temp (C)', y_params=['Surface Temp (C)'],
-                                     trend_line=True, sort_x=True)
-
-        """
-        Analyzer obiekt do alternatywnych analiz danych. Do inicjalizacji jest potrzebny DataFrame
-        Póki co jedyną metodą jest .find_correlations
-        """
-        analyzer_obj = Analyzer(data_obj_avg.select_byColumnNames(['Air Temp (C)', 'RH (%)', 'Surface Temp (C)',
-                                                                   'Tot Cond Lo Freq (C/V)', 'Tot Cond Hi Freq (C/V)',
-                                                                   'Tot Galv Corr 1 (C)', 'Tot Galv Corr 2 (C)',
-                                                                   'Galv Corr Mass Loss Rate (g/m-a)',
-                                                                   'Tot Galv Corr Mass Loss Rate (g/m-a)']))
-
-        """
-        find_correlations umożliwia wyrysowanie macierzy korelacji dla wybranych (zawartych w dataframe kolumn)
-        dodatkowo metoda zwraca tekstową formę macierzy
-        """
-        cor = analyzer_obj.find_correlations()
 
 
 def argparser():
@@ -163,14 +70,17 @@ def _get_plot_params() -> dict:
         while True:
                 print(f'ITERATION: {iter}')
 
-                x = input(f'Input x parameter name (leave empty to finish): ').strip()
-                y = input(f'Input y parameter names (comma-separated): ').strip().split(',')
+                x = input(f'Input x parameter name (str)): ').strip()
+                y = input(f'Input y parameter names (list(str)): ')
+                y = ast.literal_eval(y)
+
                 params[x] = y
 
                 stop = False if input('Stop? (y/n): ').strip().lower() == 'n' else True
                 
                 if stop:
                         break
+                iter+=1
         return params
         
         
@@ -186,7 +96,7 @@ def main():
         print(67*'=')
 
         data_obj = loadRawData(args.path)
-
+        data_obj0 = data_obj.deepcopy()
 
         available_options = {
                 0: 'Load new data from path',
@@ -200,9 +110,6 @@ def main():
                 8: 'Exit'
         }
 
-
-        
-        data_obj0 = None
         visualiser = None
 
         while True:
@@ -248,8 +155,10 @@ def main():
 
                                 data_obj.add_NewColumn(column2apply, new_column_name, func)
                         case 2:
+                                data_obj = data_obj0.deepcopy()
                                 data_obj.Compute_DailyAverages()
                         case 3:
+                                data_obj = data_obj0.deepcopy()
                                 data_obj.Compute_OneDayAverage()
                         case 4:
                                 column_names = input('Input column names to select (list[str]): ')

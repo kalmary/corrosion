@@ -8,11 +8,12 @@ import seaborn as sns
 import tkinter as tk
 import pandas as pd
 from pandastable import Table, TableModel
-
+import copy
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets
 from PyQt5.QtWidgets import QApplication
+import sys
 
 
 
@@ -148,6 +149,16 @@ class CorrosionData:
 
         return data_avg
 
+    def deepcopy(self):
+        new_obj = CorrosionData(
+            path=self.path if hasattr(self, 'path') else None,
+            column_names=copy.deepcopy(self._column_names),
+            data=self._data.copy()
+        )
+        if hasattr(self, 'path'):
+            new_obj.path = self.path
+        return new_obj
+
 
 class VisualizeData:
     def __init__(self, data: pd.DataFrame, data_name: Optional[str]) -> None:
@@ -260,10 +271,10 @@ class VisualizeData:
                 if x_param is None:
                     x_values = np.arange(len(self.data))
                 else:
-                    x_values = self._data[x_param].values
+                    x_values = self.data[x_param].values
                 
                 for y_param in y_params:
-                    y_values = self._data[y_param].values.copy()
+                    y_values = self.data[y_param].values.copy()
                     x_vals = x_values.copy()
                     
                     # Alternate between left and right axis if using dual axes
