@@ -6,7 +6,7 @@ import ast
 
 from AnalyzingTools import CorrosionData, VisualizeData
 from FileExplorer import pick_file
-from collections import OrderedDict
+
 
 
 def loadRawData(path: Union[str, pth.Path]) -> CorrosionData:
@@ -24,28 +24,38 @@ def loadRawData(path: Union[str, pth.Path]) -> CorrosionData:
         return data_obj
 
 def _get_plot_params() -> dict:
-        params = OrderedDict()
-        iter = 0
-        
+    """
+    Get plot parameters from user input.
+    Returns dict with keys: 'x_axis', 'left_axis', 'right_axis' (optional), and 'sort_x'
+    """
+    x_axis = input('Input x parameter name (str): ').strip()
+    
+    left_axis = input('Input left axis parameter names (list[str]): ')
+    left_axis = ast.literal_eval(left_axis)
+    
+    sort_x = input('Sort by x values? (y/n): ').strip().lower() == 'y'
+    
+    params = {
+        'x_axis': x_axis,
+        'left_axis': left_axis,
+        'sort_x': sort_x
+    }
+    
+    use_right = input('Use right axis? (y/n): ').strip().lower() == 'y'
+    if use_right:
+        right_axis = input('Input right axis parameter names (list[str]): ')
+        right_axis = ast.literal_eval(right_axis)
+        params['right_axis'] = right_axis
+    
+    return params
 
-        params = OrderedDict()
-        while True:
-                print(f'ITERATION: {iter}')
+def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
+        path: pth.Path = pick_file()
+        data_obj = loadRawData(path)
+        data_obj0 = data_obj.deepcopy()
 
-                x = input(f'Input x parameter name (str)): ').strip()
-                y = input(f'Input y parameter names (list(str)): ')
-                y = ast.literal_eval(y)
-
-                params[x] = y
-
-                stop = False if input('Stop? (y/n): ').strip().lower() == 'n' else True
-                
-                if stop:
-                        break
-                iter+=1
-        return params
-        
-        
+        return data_obj, data_obj0
+               
 
 def data_loop():
         
@@ -54,10 +64,8 @@ def data_loop():
         print('Welcome to Corrosion Data Analysis Tool')
         print("This program helps analyze and visualize corrosion measurement data")
         print(67*'=')
-
-        path = pick_file()
-        data_obj = loadRawData(path)
-        data_obj0 = data_obj.deepcopy()
+        
+        data_obj, data_obj0 = load_data()
 
         available_options = {
                 0: 'Load new data from path',
@@ -105,9 +113,9 @@ def data_loop():
 
                 match choice:
                         case 0:
-                                path = pick_file()
-                                data_obj = loadRawData(path)
-                                data_obj0 = data_obj.deepcopy()
+                                data_obj, data_obj0 = load_data()
+
+                                print(data_obj)
 
                         case 1:
                                 column2apply = input('Input column name (str) to apply formula to: ')
@@ -129,8 +137,9 @@ def data_loop():
                         case 6:
                                 visualiser = VisualizeData(data_obj._data, data_obj.path.stem)
                                 params2plot = _get_plot_params()
+                                sort_x = params2plot.pop('sort_x', False)
 
-                                visualiser.plot_parameters(params2plot)
+                                visualiser.plot_parameters(params2plot, sort_x=sort_x)
                                 
                                 
                         case 7:

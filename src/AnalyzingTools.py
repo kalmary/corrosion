@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import pathlib as pth
 import seaborn as sns
 
-
 import tkinter as tk
 import pandas as pd
 from pandastable import Table, TableModel
@@ -249,17 +248,24 @@ class VisualizeData:
         Plot parameters with interactive controls using PyQtGraph.
         
         Args:
-            params_dict: Dictionary where keys are x-parameter names and values are lists of y-parameter names
-                        Example: {'time': ['temperature', 'pressure'], 'distance': ['speed']}
+            params_dict: Dictionary with keys 'x_axis', 'left_axis', and optionally 'right_axis'
+                        Example: {'x_axis': 'time', 'left_axis': ['temp'], 'right_axis': ['pressure']}
                         If None, plots all numeric columns vs index
-                        Special key None can be used for index-based x-axis
             sort_x: Whether to sort by x values
         """
         
         # Handle default case - plot all numeric columns vs index
         if params_dict is None:
             numeric_cols = list(self.data.select_dtypes(include=[np.number]).columns)
-            params_dict = {None: numeric_cols}
+            params_dict = {'x_axis': None, 'left_axis': numeric_cols}
+        
+        # Extract parameters
+        x_param = params_dict.get('x_axis')
+        left_params = params_dict.get('left_axis', [])
+        right_params = params_dict.get('right_axis', [])
+        
+        # Combine all y parameters for processing
+        all_y_params = left_params + right_params
         
         # Create Qt Application if it doesn't exist
         app = QApplication.instance()
@@ -268,7 +274,7 @@ class VisualizeData:
 
         # Create window with white background
         win = pg.GraphicsLayoutWidget(show=True)
-        win.setBackground('w')  # Set white background
+        win.setBackground('w')
         title = f"Interactive Plot"
         if self.data_name:
             title += f" - {self.data_name}"
@@ -276,12 +282,22 @@ class VisualizeData:
         win.resize(1200, 700)
 
         # Count total y parameters to decide if we need dual axes
-        total_y_params = sum(len(y_list) for y_list in params_dict.values())
-        use_dual_axes = total_y_params > 1
-
+        use_dual_axes = len(right_params) > 0
+        
+        # Check if we're dealing with datetime data
+        has_datetime = False
+        if x_param is not None and x_param in self.data.columns:
+            if pd.api.types.is_datetime64_any_dtype(self.data[x_param]):
+                has_datetime = True
+        
         # Create main plot with left axis
         plot1 = win.addPlot()
         plot1.showGrid(x=True, y=True, alpha=0.3)
+        
+        # Set up date axis if we have datetime data
+        if has_datetime:
+            axis = pg.DateAxisItem(orientation='bottom')
+            plot1.setAxisItems({'bottom': axis})
         
         # Set black color for axes, labels, and ticks on white background
         plot1.getAxis('bottom').setPen('k')
@@ -290,11 +306,7 @@ class VisualizeData:
         plot1.getAxis('left').setTextPen('k')
         
         # Set x-axis label
-        if len(params_dict) == 1:
-            x_key = list(params_dict.keys())[0]
-            x_label = x_key if x_key is not None else "Index"
-        else:
-            x_label = "X Values (mixed parameters)"
+        x_label = x_param if x_param is not None else "Index"
         plot1.setLabel('bottom', x_label)
         plot1.setLabel('left', 'Left Axis' if use_dual_axes else 'Values')
         
@@ -311,81 +323,147 @@ class VisualizeData:
             plot1.getAxis('right').setPen('k')
             plot1.getAxis('right').setTextPen('k')
             
-            # Add legends with better positioning
-            legend1 = plot1.addLegend(offset=(10, 10))
+            # Add legends with borders and better positioning
+            legend1 = plot1.addLegend(offset=(70, 10))
             legend1.setParentItem(plot1.graphicsItem())
+            legend1.setBrush((255, 255, 255))
+            legend1.setPen(pg.mkPen('k', width=2))
+            legend1.setLabelTextSize('10pt')
+            legend1.setZValue(100)
             
-            # Position second legend on the right side, below the right axis label
-            legend2 = pg.LegendItem(offset=(-150, 10))  # Negative offset = right side
+            legend2 = pg.LegendItem(offset=(-170, 10))
             legend2.setParentItem(plot1.graphicsItem())
-            
-            # Add titles to distinguish legends
-            # legend1.Title("Left Axis")
-            # legend2.("Right Axis")
+            legend2.anchor(itemPos=(1, 0), parentPos=(1, 0), offset=(-170, 10))
+            legend2.setBrush((255, 255, 255))
+            legend2.setPen(pg.mkPen('k', width=2))
+            legend2.setLabelTextSize('10pt')
+            legend2.setZValue(100)
         else:
-            legend1 = plot1.addLegend(offset=(10, 10))
+            legend1 = plot1.addLegend(offset=(70, 10))
+            legend1.setBrush((255, 255, 255))
+            legend1.setPen(pg.mkPen('k', width=2))
+            legend1.setLabelTextSize('10pt')
+            legend1.setZValue(100)
         
         # Define colors (darker colors for white background)
         colors = [(255, 0, 0), (0, 128, 0), (0, 0, 255), (255, 128, 0), 
-                 (128, 0, 128), (0, 128, 128), (128, 0, 0), (0, 0, 128),
-                 (255, 0, 255), (0, 128, 0)]
+                (128, 0, 128), (0, 128, 128), (128, 0, 0), (0, 0, 128),
+                (255, 0, 255), (0, 128, 0)]
         
-        color_idx = 0
-        param_count = 0
-        
-        # Plot each x-parameter with its y-parameters
-        for x_param, y_params in params_dict.items():
-            # Determine x values
-            if x_param is None:
-                x_values = np.arange(len(self.data))
+        # Get x values
+        if x_param is None:
+            x_values = np.arange(len(self.data))
+        else:
+            # Check if x_param is datetime and convert to Unix timestamp
+            if pd.api.types.is_datetime64_any_dtype(self.data[x_param]):
+                x_values = self.data[x_param].astype(np.int64) / 10**9
             else:
-                x_values = self.data[x_param].values
+                x_values = self.data[x_param]
+        
+        # Plot left axis parameters
+        param_count = 0
+        for y_param in left_params:
+            y_values = self.data[y_param].values.copy()
             
-            for y_param in y_params:
-                y_values = self.data[y_param].values.copy()
+            # Ensure x_values is a numpy array (convert from Series if needed)
+            if isinstance(x_values, pd.Series):
+                x_vals = x_values.values.copy()
+            elif isinstance(x_values, np.ndarray):
                 x_vals = x_values.copy()
+            else:
+                x_vals = np.array(x_values)
+            
+            # Convert to float arrays to ensure numeric operations work
+            try:
+                x_vals = np.asarray(x_vals, dtype=float)
+                y_values = np.asarray(y_values, dtype=float)
+            except (ValueError, TypeError):
+                print(f'Warning: Could not convert {y_param} or {x_param} to numeric values. Skipping.')
+                continue
+            
+            if sort_x and x_param is not None:
+                sort_idx = np.argsort(x_vals)
+                x_vals = x_vals[sort_idx]
+                y_values = y_values[sort_idx]
+            
+            color = colors[param_count % len(colors)]
+            
+            # Create label for legend
+            label = y_param if x_param is None else f'{y_param} vs {x_param}'
+            
+            # Add line and scatter plot to left axis
+            line = pg.PlotDataItem(
+                x=x_vals,
+                y=y_values,
+                pen=pg.mkPen(color, width=1.5),
+                symbol=None
+            )
+            plot1.addItem(line)
+            
+            scatter = pg.ScatterPlotItem(
+                x=x_vals, 
+                y=y_values,
+                pen=None,
+                symbol='o',
+                size=3,
+                brush=color
+            )
+            plot1.addItem(scatter)
+            
+            legend1.addItem(line, label)
+            param_count += 1
+        
+        # Plot right axis parameters if they exist
+        if use_dual_axes and plot2 is not None:
+            for y_param in right_params:
+                y_values = self.data[y_param].values.copy()
+                
+                # Ensure x_values is a numpy array (convert from Series if needed)
+                if isinstance(x_values, pd.Series):
+                    x_vals = x_values.values.copy()
+                elif isinstance(x_values, np.ndarray):
+                    x_vals = x_values.copy()
+                else:
+                    x_vals = np.array(x_values)
                 
                 # Convert to float arrays to ensure numeric operations work
                 try:
-                    x_vals = x_vals.astype(float)
-                    y_values = y_values.astype(float)
+                    x_vals = np.asarray(x_vals, dtype=float)
+                    y_values = np.asarray(y_values, dtype=float)
                 except (ValueError, TypeError):
                     print(f'Warning: Could not convert {y_param} or {x_param} to numeric values. Skipping.')
                     continue
-                
-                # Alternate between left and right axis if using dual axes
-                use_right_axis = use_dual_axes and (param_count % 2 == 1)
                 
                 if sort_x and x_param is not None:
                     sort_idx = np.argsort(x_vals)
                     x_vals = x_vals[sort_idx]
                     y_values = y_values[sort_idx]
                 
-                color = colors[color_idx % len(colors)]
-                
-                # Choose which plot to add to
-                target_plot = plot2 if use_right_axis else plot1
-                target_legend = legend2 if use_right_axis else legend1
+                color = colors[param_count % len(colors)]
                 
                 # Create label for legend
-                if x_param is None:
-                    label = y_param
-                else:
-                    label = f'{y_param} vs {x_param}'
+                label = y_param if x_param is None else f'{y_param} vs {x_param}'
                 
-                # Add scatter plot with smaller points
-                curve = pg.ScatterPlotItem(
+                # Add line and scatter plot to right axis
+                line = pg.PlotDataItem(
+                    x=x_vals,
+                    y=y_values,
+                    pen=pg.mkPen(color, width=1.5),
+                    symbol=None
+                )
+                plot2.addItem(line)
+                
+                scatter = pg.ScatterPlotItem(
                     x=x_vals, 
                     y=y_values,
                     pen=None,
                     symbol='o',
-                    size=4,  # Reduced from 8 to 4
+                    size=3,
                     brush=color
                 )
-                target_plot.addItem(curve)
-                target_legend.addItem(curve, label)
+                plot2.addItem(scatter)
                 
-                color_idx += 1
+                legend2.addItem(line, label)
                 param_count += 1
         
         # Update views when plot1 changes (if using dual axes)
@@ -403,7 +481,6 @@ class VisualizeData:
         # Start Qt event loop if needed
         if app is not None:
             app.exec_()
-
 
     def sort_cols(self, x, y) -> tuple[np.array, np.array]:
         x = np.asarray(x)
