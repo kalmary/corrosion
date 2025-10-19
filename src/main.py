@@ -1,11 +1,11 @@
 import pathlib as pth
-import argparse
 from typing import Union, Optional
 import pandas as pd
 
 import ast
 
 from AnalyzingTools import CorrosionData, VisualizeData
+from FileExplorer import pick_file
 from collections import OrderedDict
 
 
@@ -22,44 +22,6 @@ def loadRawData(path: Union[str, pth.Path]) -> CorrosionData:
         print(f'\nLoaded data from path {path}\n')
 
         return data_obj
-
-
-def argparser():
-        file_name = 'Acuity_LS_00833_20250226_102627.csv'
-        base_path = pth.Path(__file__).parent.parent
-        file_path = base_path / 'data' / file_name
-
-        print(file_path)
-        
-        parser = argparse.ArgumentParser(
-        description="Script for training the model based on predefined range of scenarios",
-        formatter_class=argparse.RawTextHelpFormatter
-        )
-
-        parser.add_argument(
-                '-p', '--path',
-                type=str,
-                default=str(file_path.resolve()),
-                help=(
-                'Absolute path to the data file\n'
-                f'If None it defaults to first file in {file_path}')
-                )
-        
-            # Flag definition
-        parser.add_argument(
-                '-d', '--device',
-                type=str,
-                default='cpu',
-                choices=['cpu', 'cuda', 'gpu'], # choice limit
-                help=(
-                "Device for tensor based computation.\n"
-                "Pick 'cpu' or 'cuda'/ 'gpu'.\n"
-                )
-        )   
-
-
-        args = parser.parse_args()
-        return args
 
 def _get_plot_params() -> dict:
         params = OrderedDict()
@@ -85,9 +47,7 @@ def _get_plot_params() -> dict:
         
         
 
-def main():
-        args = argparser()
-        
+def data_loop():
         
 
         print(67*'=')
@@ -95,7 +55,8 @@ def main():
         print("This program helps analyze and visualize corrosion measurement data")
         print(67*'=')
 
-        data_obj = loadRawData(args.path)
+        path = pick_file()
+        data_obj = loadRawData(path)
         data_obj0 = data_obj.deepcopy()
 
         available_options = {
@@ -144,7 +105,7 @@ def main():
 
                 match choice:
                         case 0:
-                                path = input('Input new absolute path to data file: ')
+                                path = pick_file()
                                 data_obj = loadRawData(path)
                                 data_obj0 = data_obj.deepcopy()
 
@@ -161,12 +122,12 @@ def main():
                                 data_obj = data_obj0.deepcopy()
                                 data_obj.Compute_OneDayAverage()
                         case 4:
-                                column_names = input('Input column names to select (list[str]): ')
+                                column_names = ast.literal_eval(input('Input column names to select (list[str]): '))
                                 data_obj.select_byColumnNames(column_names)
                         case 5:
                                 data_obj = data_obj0.deepcopy()
                         case 6:
-                                visualiser = VisualizeData(data_obj.data, data_obj.path.stem)
+                                visualiser = VisualizeData(data_obj._data, data_obj.path.stem)
                                 params2plot = _get_plot_params()
 
                                 visualiser.plot_parameters(params2plot)
@@ -185,11 +146,8 @@ def main():
                                 print('Invalid choice. Please try again.')
                 
 
-
-
-
-
-
+def main():
+        data_loop()
 
 if __name__ == '__main__':
         main() # główna część kodu patrz tutaj

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import pathlib as pth
 import seaborn as sns
 
+
 import tkinter as tk
 import pandas as pd
 from pandastable import Table, TableModel
@@ -57,7 +58,17 @@ class CorrosionData:
 
     @property
     def column_names(self):
-        self._column_names = self._data.columns
+        # If no dataframe is loaded yet, return any previously set column names
+        if self._data is None:
+            return self._column_names
+
+        # If data is a DataFrame, use its columns
+        if isinstance(self._data, pd.DataFrame):
+            self._column_names = self._data.columns
+        # If data is a Series, convert to DataFrame first
+        elif isinstance(self._data, pd.Series):
+            self._column_names = self._data.to_frame().columns
+
         return self._column_names
 
     @property
@@ -65,31 +76,87 @@ class CorrosionData:
         return self._data
 
     @property
-    def data_numeric(self):
-        return self._data._get_numeric_data()
+    def data_numeric(self) -> pd.DataFrame:
+        """
+        Return only numeric columns from the stored data, handling None and Series cases.
+        Raises:
+            ValueError: if no data is available.
+        """
+        if self._data is None:
+            raise ValueError("No data available to return numeric columns")
+
+        # If a Series is stored, convert to a DataFrame first
+        if isinstance(self._data, pd.Series):
+            df = self._data.to_frame()
+            return df.select_dtypes(include=[np.number])
+
+        # If already a DataFrame, select numeric columns
+        if isinstance(self._data, pd.DataFrame):
+            return self._data.select_dtypes(include=[np.number])
+
+        # Fallback: attempt to coerce to a DataFrame and select numeric columns
+        df = pd.DataFrame(self._data)
+        return df.select_dtypes(include=[np.number])
 
     def _convert2numeric(self) -> pd.DataFrame:
-        self._data.iloc[:, 1:] = self._data.iloc[:, 1:].apply(pd.to_numeric, errors='raise')
-        return self._data
+        self._data.iloc[:, 1:] = self._data.iloc[:, 1:].apply(pd.to_numeric, errors='raise') # type: ignore
+        return self._data # type: ignore
 
     def _convertTime(self) -> pd.DataFrame:
-        if 'Unix Time (s)' in self._data.columns:
-            self._data['Unix Time (s)'] = pd.to_numeric(self._data['Unix Time (s)'])
-            self._data['Unix Time (s)'] = pd.to_datetime(self._data['Unix Time (s)'], unit='s')
-            self._data = self._data.rename(columns={'Unix Time (s)': 'Date-Time'})
+        # If there's no data, just return as-is to avoid "None is not subscriptable"
+        if self._data is None:
+            return self._data # type: ignore
 
-        return self._data
+        # Work with a DataFrame; if it's a Series, convert to DataFrame first
+        if isinstance(self._data, pd.Series):
+            df = self._data.to_frame()
+        else:
+            df = self._data
+
+        # Proceed only if the expected column exists
+        if hasattr(df, 'columns') and 'Unix Time (s)' in df.columns:
+            # Coerce invalid values instead of raising, then convert to datetime
+            df['Unix Time (s)'] = pd.to_numeric(df['Unix Time (s)'], errors='coerce')
+            df['Unix Time (s)'] = pd.to_datetime(df['Unix Time (s)'], unit='s', errors='coerce')
+            df = df.rename(columns={'Unix Time (s)': 'Date-Time'})
+
+            # store back the possibly modified DataFrame
+            self._data = df
+
+        return self._data # type: ignore
 
 
-    def limit_byDateTime(self, date: list[str]) -> pd.DataFrame:
-        target_date = pd.to_datetime(date)
-        self._data['Date-Time'] = pd.to_datetime(self._data['Date-Time'])
-        data_filtered = self._data[self._data['Date-Time'].dt.date.isin(target_date.dt.date)]
+    def limit_byDateTime(self, date: Union[str, list[str]]) -> pd.DataFrame:
+        # Ensure data is loaded
+        if self._data is None:
+            raise ValueError("No data available to filter by date")
+
+        # Ensure 'Date-Time' column exists (try to convert if not present)
+        if 'Date-Time' not in getattr(self._data, 'columns', []):
+            self._convertTime()
+            if 'Date-Time' not in getattr(self._data, 'columns', []):
+                raise KeyError("No 'Date-Time' column found in data")
+
+        # Parse target dates; accept single string or list-like input
+        target_dt = pd.to_datetime(date, errors='coerce')
+        if isinstance(target_dt, (pd.DatetimeIndex, pd.Series)):
+            target_dates = target_dt.date
+        else:
+            if pd.isna(target_dt):
+                raise ValueError("Could not parse provided date(s)")
+            target_dates = [target_dt.date()]
+
+        # Ensure Date-Time column is datetime dtype
+        self._data['Date-Time'] = pd.to_datetime(self._data['Date-Time'], errors='coerce')
+
+        # Create boolean mask safely and return filtered copy
+        mask = self._data['Date-Time'].dt.date.isin(target_dates)
+        data_filtered = self._data.loc[mask].copy()
 
         return data_filtered
 
     def select_byColumnNames(self, column_names: list[str]) -> pd.DataFrame:
-        data_filtered = self._data[column_names]
+        data_filtered = self._data[column_names] # type: ignore
 
         self._data = data_filtered
 
@@ -97,14 +164,14 @@ class CorrosionData:
 
     def add_NewColumn(self, column2apply: str, new_column_name: str, func):
 
-        self._data[new_column_name] = self._data[column2apply].apply(func)
+        self._data[new_column_name] = self._data[column2apply].apply(func) # type: ignore
 
     def Compute_DailyAverages(self, time_name='Date-Time'):
 
         non_time_cols = self._data.iloc[:, 2:]
         non_time_col_names = non_time_cols.columns
 
-        data_avg = non_time_cols.groupby(self._data['Date-Time'].dt.date).mean()
+        data_avg = non_time_cols.groupby(self._data['Date-Time'].dt.date).mean() # type: ignore
 
         self._data = data_avg
 
@@ -112,10 +179,20 @@ class CorrosionData:
 
     def Compute_OneDayAverage(self, time_name: str ='Date-Time'):
 
+        # ensure data exists
+        if self._data is None:
+            raise ValueError("No data available to compute daily averages")
+
         # conversion to date-time if its not already done
         if 'Date-Time' not in self._data.columns:
             self._convertTime()
-        self._data['Date-Time'] = pd.to_datetime(self._data['Date-Time'])
+
+        # Safely convert Date-Time column to datetime, allowing coercion of invalid values
+        self._data['Date-Time'] = pd.to_datetime(self._data['Date-Time'], errors='coerce')
+
+        # Ensure there are valid datetime values
+        if self._data['Date-Time'].isna().all():
+            raise ValueError("No valid 'Date-Time' values available after conversion")
 
         # look for first record from 7 am - 8 am
         mask_first = (self._data['Date-Time'].dt.hour >= 7) & (self._data['Date-Time'].dt.hour < 8)
@@ -143,7 +220,9 @@ class CorrosionData:
 
         data_avg = data_avg.rename(columns={'Date-Time': 'Hour'})
 
-        data_avg = data_avg.drop(columns=['Test Time (h)'])
+        # drop Test Time (h) only if present
+        if 'Test Time (h)' in data_avg.columns:
+            data_avg = data_avg.drop(columns=['Test Time (h)'])
 
         self._data = data_avg
 
@@ -152,7 +231,7 @@ class CorrosionData:
     def deepcopy(self):
         new_obj = CorrosionData(
             path=self.path if hasattr(self, 'path') else None,
-            column_names=copy.deepcopy(self._column_names),
+            column_names=copy.deepcopy(self._column_names), # type: ignore
             data=self._data.copy()
         )
         if hasattr(self, 'path'):
@@ -165,192 +244,165 @@ class VisualizeData:
         self.data = data
         self.data_name = data_name
 
-    def view_dataframe(self):
-        #main window
-        root = tk.Tk()
-        if self.data_name is not None:
-            root.title(f"Data loaded from: {self.data_name}")
-
-        #window size
-        root.geometry("1000x600") 
-
-
-        frame = tk.Frame(root)
-        frame.pack(fill='both', expand=True)
-
-        pt = Table(frame, 
-                   dataframe=self.data,
-                   showtoolbar=True,  # toolbar on top
-                   showstatusbar=True) # status barr bottom
-
-        # enable resize and scroll
-        pt.autoResizeColumns()
+    def plot_parameters(self, params_dict: dict = None, sort_x: bool = False) -> None:
+        """
+        Plot parameters with interactive controls using PyQtGraph.
         
+        Args:
+            params_dict: Dictionary where keys are x-parameter names and values are lists of y-parameter names
+                        Example: {'time': ['temperature', 'pressure'], 'distance': ['speed']}
+                        If None, plots all numeric columns vs index
+                        Special key None can be used for index-based x-axis
+            sort_x: Whether to sort by x values
+        """
+        
+        # Handle default case - plot all numeric columns vs index
+        if params_dict is None:
+            numeric_cols = list(self.data.select_dtypes(include=[np.number]).columns)
+            params_dict = {None: numeric_cols}
+        
+        # Create Qt Application if it doesn't exist
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
 
-        # display
-        pt.show() 
-        root.mainloop()
+        # Create window with white background
+        win = pg.GraphicsLayoutWidget(show=True)
+        win.setBackground('w')  # Set white background
+        title = f"Interactive Plot"
+        if self.data_name:
+            title += f" - {self.data_name}"
+        win.setWindowTitle(title)
+        win.resize(1200, 700)
 
-    def plot_parameters(self, params_dict: dict = None, trend_line: bool = True, 
-                        sort_x: bool = True) -> None:
-            """
-            Plot parameters with interactive controls using PyQtGraph.
+        # Count total y parameters to decide if we need dual axes
+        total_y_params = sum(len(y_list) for y_list in params_dict.values())
+        use_dual_axes = total_y_params > 1
+
+        # Create main plot with left axis
+        plot1 = win.addPlot()
+        plot1.showGrid(x=True, y=True, alpha=0.3)
+        
+        # Set black color for axes, labels, and ticks on white background
+        plot1.getAxis('bottom').setPen('k')
+        plot1.getAxis('left').setPen('k')
+        plot1.getAxis('bottom').setTextPen('k')
+        plot1.getAxis('left').setTextPen('k')
+        
+        # Set x-axis label
+        if len(params_dict) == 1:
+            x_key = list(params_dict.keys())[0]
+            x_label = x_key if x_key is not None else "Index"
+        else:
+            x_label = "X Values (mixed parameters)"
+        plot1.setLabel('bottom', x_label)
+        plot1.setLabel('left', 'Left Axis' if use_dual_axes else 'Values')
+        
+        # Create second ViewBox for right axis if needed
+        plot2 = None
+        legend2 = None
+        if use_dual_axes:
+            plot2 = pg.ViewBox()
+            plot1.showAxis('right')
+            plot1.scene().addItem(plot2)
+            plot1.getAxis('right').linkToView(plot2)
+            plot2.setXLink(plot1)
+            plot1.getAxis('right').setLabel('Right Axis')
+            plot1.getAxis('right').setPen('k')
+            plot1.getAxis('right').setTextPen('k')
             
-            Args:
-                params_dict: Dictionary where keys are x-parameter names and values are lists of y-parameter names
-                            Example: {'time': ['temperature', 'pressure'], 'distance': ['speed']}
-                            If None, plots all numeric columns vs index
-                            Special key None can be used for index-based x-axis
-                trend_line: Whether to add polynomial trend lines
-                sort_x: Whether to sort by x values
-            """
+            # Add legends with better positioning
+            legend1 = plot1.addLegend(offset=(10, 10))
+            legend1.setParentItem(plot1.graphicsItem())
             
-            # Handle default case - plot all numeric columns vs index
-            if params_dict is None:
-                numeric_cols = list(self.data.select_dtypes(include=[np.number]).columns)
-                params_dict = {None: numeric_cols}
+            # Position second legend on the right side, below the right axis label
+            legend2 = pg.LegendItem(offset=(-150, 10))  # Negative offset = right side
+            legend2.setParentItem(plot1.graphicsItem())
             
-            # Create Qt Application if it doesn't exist
-            app = QApplication.instance()
-            if app is None:
-                app = QApplication(sys.argv)
-
-            # Create window
-            win = pg.GraphicsLayoutWidget(show=True)
-            title = f"Interactive Plot"
-            if self.data_name:
-                title += f" - {self.data_name}"
-            win.setWindowTitle(title)
-            win.resize(1200, 700)
-
-            # Count total y parameters to decide if we need dual axes
-            total_y_params = sum(len(y_list) for y_list in params_dict.values())
-            use_dual_axes = total_y_params > 1
-
-            # Create main plot with left axis
-            plot1 = win.addPlot()
-            plot1.showGrid(x=True, y=True, alpha=0.3)
-            
-            # Set x-axis label
-            if len(params_dict) == 1:
-                x_key = list(params_dict.keys())[0]
-                x_label = x_key if x_key is not None else "Index"
+            # Add titles to distinguish legends
+            # legend1.Title("Left Axis")
+            # legend2.("Right Axis")
+        else:
+            legend1 = plot1.addLegend(offset=(10, 10))
+        
+        # Define colors (darker colors for white background)
+        colors = [(255, 0, 0), (0, 128, 0), (0, 0, 255), (255, 128, 0), 
+                 (128, 0, 128), (0, 128, 128), (128, 0, 0), (0, 0, 128),
+                 (255, 0, 255), (0, 128, 0)]
+        
+        color_idx = 0
+        param_count = 0
+        
+        # Plot each x-parameter with its y-parameters
+        for x_param, y_params in params_dict.items():
+            # Determine x values
+            if x_param is None:
+                x_values = np.arange(len(self.data))
             else:
-                x_label = "X Values (mixed parameters)"
-            plot1.setLabel('bottom', x_label)
-            plot1.setLabel('left', 'Left Axis' if use_dual_axes else 'Values')
+                x_values = self.data[x_param].values
             
-            # Create second ViewBox for right axis if needed
-            plot2 = None
-            legend2 = None
-            if use_dual_axes:
-                plot2 = pg.ViewBox()
-                plot1.showAxis('right')
-                plot1.scene().addItem(plot2)
-                plot1.getAxis('right').linkToView(plot2)
-                plot2.setXLink(plot1)
-                plot1.getAxis('right').setLabel('Right Axis')
+            for y_param in y_params:
+                y_values = self.data[y_param].values.copy()
+                x_vals = x_values.copy()
                 
-                # Add legends
-                legend1 = plot1.addLegend(offset=(10, 10))
-                legend2 = pg.LegendItem(offset=(10, 100))
-                legend2.setParentItem(plot1.graphicsItem())
-            else:
-                legend1 = plot1.addLegend(offset=(10, 10))
-            
-            # Define colors
-            colors = ['r', 'g', 'b', 'c', 'm', 'y', 'w', 
-                    (255, 128, 0), (128, 0, 255), (0, 255, 128)]
-            
-            color_idx = 0
-            param_count = 0
-            
-            # Plot each x-parameter with its y-parameters
-            for x_param, y_params in params_dict.items():
-                # Determine x values
+                # Convert to float arrays to ensure numeric operations work
+                try:
+                    x_vals = x_vals.astype(float)
+                    y_values = y_values.astype(float)
+                except (ValueError, TypeError):
+                    print(f'Warning: Could not convert {y_param} or {x_param} to numeric values. Skipping.')
+                    continue
+                
+                # Alternate between left and right axis if using dual axes
+                use_right_axis = use_dual_axes and (param_count % 2 == 1)
+                
+                if sort_x and x_param is not None:
+                    sort_idx = np.argsort(x_vals)
+                    x_vals = x_vals[sort_idx]
+                    y_values = y_values[sort_idx]
+                
+                color = colors[color_idx % len(colors)]
+                
+                # Choose which plot to add to
+                target_plot = plot2 if use_right_axis else plot1
+                target_legend = legend2 if use_right_axis else legend1
+                
+                # Create label for legend
                 if x_param is None:
-                    x_values = np.arange(len(self.data))
+                    label = y_param
                 else:
-                    x_values = self.data[x_param].values
+                    label = f'{y_param} vs {x_param}'
                 
-                for y_param in y_params:
-                    y_values = self.data[y_param].values.copy()
-                    x_vals = x_values.copy()
-                    
-                    # Alternate between left and right axis if using dual axes
-                    use_right_axis = use_dual_axes and (param_count % 2 == 1)
-                    
-                    if sort_x and x_param is not None:
-                        sort_idx = np.argsort(x_vals)
-                        x_vals = x_vals[sort_idx]
-                        y_values = y_values[sort_idx]
-                    
-                    color = colors[color_idx % len(colors)]
-                    
-                    # Choose which plot to add to
-                    target_plot = plot2 if use_right_axis else plot1
-                    target_legend = legend2 if use_right_axis else legend1
-                    
-                    # Create label for legend
-                    if x_param is None:
-                        label = y_param
-                    else:
-                        label = f'{y_param} vs {x_param}'
-                    
-                    # Add scatter plot
-                    curve = pg.ScatterPlotItem(
-                        x=x_vals, 
-                        y=y_values,
-                        pen=None,
-                        symbol='o',
-                        size=8,
-                        brush=color
-                    )
-                    target_plot.addItem(curve)
-                    target_legend.addItem(curve, label)
-                    
-                    # Add trend line if requested
-                    if trend_line:
-                        try:
-                            mask = ~(np.isnan(x_vals) | np.isnan(y_values))
-                            x_clean = x_vals[mask]
-                            y_clean = y_values[mask]
-                            
-                            if len(x_clean) > 5:
-                                coeffs = np.polyfit(x_clean, y_clean, min(4, len(x_clean)-1))
-                                trend_eq = np.poly1d(coeffs)
-                                
-                                x_smooth = np.linspace(x_clean.min(), x_clean.max(), 200)
-                                y_smooth = trend_eq(x_smooth)
-                                
-                                trend_curve = pg.PlotCurveItem(
-                                    x=x_smooth,
-                                    y=y_smooth,
-                                    pen=pg.mkPen(color, style=pg.QtCore.Qt.DashLine, width=2)
-                                )
-                                target_plot.addItem(trend_curve)
-                                target_legend.addItem(trend_curve, f'Trend: {y_param}')
-                        except Exception as e:
-                            print(f'Error computing trend line for {y_param}: {e}')
-                    
-                    color_idx += 1
-                    param_count += 1
-            
-            # Update views when plot1 changes (if using dual axes)
-            if use_dual_axes and plot2 is not None:
-                def update_views():
-                    plot2.setGeometry(plot1.vb.sceneBoundingRect())
-                    plot2.linkedViewChanged(plot1.vb, plot2.XAxis)
+                # Add scatter plot with smaller points
+                curve = pg.ScatterPlotItem(
+                    x=x_vals, 
+                    y=y_values,
+                    pen=None,
+                    symbol='o',
+                    size=4,  # Reduced from 8 to 4
+                    brush=color
+                )
+                target_plot.addItem(curve)
+                target_legend.addItem(curve, label)
                 
-                update_views()
-                plot1.vb.sigResized.connect(update_views)
+                color_idx += 1
+                param_count += 1
+        
+        # Update views when plot1 changes (if using dual axes)
+        if use_dual_axes and plot2 is not None:
+            def update_views():
+                plot2.setGeometry(plot1.vb.sceneBoundingRect())
+                plot2.linkedViewChanged(plot1.vb, plot2.XAxis)
             
-            # Enable auto-range
-            plot1.enableAutoRange()
-            
-            # Start Qt event loop if needed
-            if app is not None:
-                app.exec_()
+            update_views()
+            plot1.vb.sigResized.connect(update_views)
+        
+        # Enable auto-range
+        plot1.enableAutoRange()
+        
+        # Start Qt event loop if needed
+        if app is not None:
+            app.exec_()
 
 
     def sort_cols(self, x, y) -> tuple[np.array, np.array]:
@@ -374,4 +426,16 @@ class VisualizeData:
         y = y.tolist()
 
         return x, y
+
+    def find_correlations(self):
+        correlation_matrix = self.data.corr()  # Compute correlation matrix
+        plt.figure(figsize=(10, 10))
+        sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5)
+        plt.title("Correlation Matrix")
+        plt.xticks(rotation=45, ha='right')  # 'ha' ensures alignment
+        plt.yticks(rotation=45, ha='right')
+        plt.tight_layout()
+        plt.show()
+
+        return correlation_matrix
     
