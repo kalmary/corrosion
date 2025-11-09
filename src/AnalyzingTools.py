@@ -243,7 +243,8 @@ class VisualizeData:
         self.data = data
         self.data_name = data_name
 
-    def plot_parameters(self, params_dict: dict = None, sort_x: bool = False) -> None:
+    def plot_parameters(self, params_dict: Optional[dict] = None, sort_x: bool = False, 
+                    log_x: bool = False, log_left: bool = False, log_right: bool = False) -> None:
         """
         Plot parameters with interactive controls using PyQtGraph.
         
@@ -252,8 +253,11 @@ class VisualizeData:
                         Example: {'x_axis': 'time', 'left_axis': ['temp'], 'right_axis': ['pressure']}
                         If None, plots all numeric columns vs index
             sort_x: Whether to sort by x values
+            log_x: Whether to use logarithmic scale for x-axis
+            log_left: Whether to use logarithmic scale for left y-axis
+            log_right: Whether to use logarithmic scale for right y-axis
         """
-        
+    
         # Handle default case - plot all numeric columns vs index
         if params_dict is None:
             numeric_cols = list(self.data.select_dtypes(include=[np.number]).columns)
@@ -294,10 +298,16 @@ class VisualizeData:
         plot1 = win.addPlot()
         plot1.showGrid(x=True, y=True, alpha=0.3)
         
-        # Set up date axis if we have datetime data
-        if has_datetime:
+        # Set up date axis if we have datetime data (log scale not compatible with datetime)
+        if has_datetime and not log_x:
             axis = pg.DateAxisItem(orientation='bottom')
             plot1.setAxisItems({'bottom': axis})
+        
+        # Set logarithmic scales
+        if log_x and not has_datetime:
+            plot1.setLogMode(x=True, y=False)
+        if log_left:
+            plot1.setLogMode(x=plot1.ctrl.logXCheck.isChecked() if hasattr(plot1, 'ctrl') else log_x, y=True)
         
         # Set black color for axes, labels, and ticks on white background
         plot1.getAxis('bottom').setPen('k')
@@ -307,8 +317,15 @@ class VisualizeData:
         
         # Set x-axis label
         x_label = x_param if x_param is not None else "Index"
+        if log_x:
+            x_label += " (log scale)"
         plot1.setLabel('bottom', x_label)
-        plot1.setLabel('left', 'Left Axis' if use_dual_axes else 'Values')
+        
+        # Set y-axis label
+        left_label = 'Left Axis' if use_dual_axes else 'Values'
+        if log_left:
+            left_label += " (log scale)"
+        plot1.setLabel('left', left_label)
         
         # Create second ViewBox for right axis if needed
         plot2 = None
@@ -319,7 +336,11 @@ class VisualizeData:
             plot1.scene().addItem(plot2)
             plot1.getAxis('right').linkToView(plot2)
             plot2.setXLink(plot1)
-            plot1.getAxis('right').setLabel('Right Axis')
+            
+            right_label = 'Right Axis'
+            if log_right:
+                right_label += " (log scale)"
+            plot1.getAxis('right').setLabel(right_label)
             plot1.getAxis('right').setPen('k')
             plot1.getAxis('right').setTextPen('k')
             
@@ -381,6 +402,21 @@ class VisualizeData:
                 print(f'Warning: Could not convert {y_param} or {x_param} to numeric values. Skipping.')
                 continue
             
+            # Filter out non-positive values if using log scale
+            if log_x or log_left:
+                valid_mask = np.ones(len(x_vals), dtype=bool)
+                if log_x:
+                    valid_mask &= (x_vals > 0)
+                if log_left:
+                    valid_mask &= (y_values > 0)
+                
+                if not np.any(valid_mask):
+                    print(f'Warning: No positive values for {y_param} with log scale. Skipping.')
+                    continue
+                
+                x_vals = x_vals[valid_mask]
+                y_values = y_values[valid_mask]
+            
             if sort_x and x_param is not None:
                 sort_idx = np.argsort(x_vals)
                 x_vals = x_vals[sort_idx]
@@ -391,26 +427,17 @@ class VisualizeData:
             # Create label for legend
             label = y_param if x_param is None else f'{y_param} vs {x_param}'
             
-            # Add line and scatter plot to left axis
-            line = pg.PlotDataItem(
-                x=x_vals,
-                y=y_values,
-                pen=pg.mkPen(color, width=1.5),
-                symbol=None
-            )
-            plot1.addItem(line)
-            
+            # Add ONLY scatter plot (no lines)
             scatter = pg.ScatterPlotItem(
                 x=x_vals, 
                 y=y_values,
-                pen=None,
+                pen=pg.mkPen(color, width=1),
                 symbol='o',
-                size=3,
-                brush=color
+                size=4,
+                brush=pg.mkBrush(*color, 180)  # Semi-transparent
             )
             plot1.addItem(scatter)
-            
-            legend1.addItem(line, label)
+            legend1.addItem(scatter, label)
             param_count += 1
         
         # Plot right axis parameters if they exist
@@ -434,6 +461,21 @@ class VisualizeData:
                     print(f'Warning: Could not convert {y_param} or {x_param} to numeric values. Skipping.')
                     continue
                 
+                # Filter out non-positive values if using log scale
+                if log_x or log_right:
+                    valid_mask = np.ones(len(x_vals), dtype=bool)
+                    if log_x:
+                        valid_mask &= (x_vals > 0)
+                    if log_right:
+                        valid_mask &= (y_values > 0)
+                    
+                    if not np.any(valid_mask):
+                        print(f'Warning: No positive values for {y_param} with log scale. Skipping.')
+                        continue
+                    
+                    x_vals = x_vals[valid_mask]
+                    y_values = y_values[valid_mask]
+                
                 if sort_x and x_param is not None:
                     sort_idx = np.argsort(x_vals)
                     x_vals = x_vals[sort_idx]
@@ -444,27 +486,23 @@ class VisualizeData:
                 # Create label for legend
                 label = y_param if x_param is None else f'{y_param} vs {x_param}'
                 
-                # Add line and scatter plot to right axis
-                line = pg.PlotDataItem(
-                    x=x_vals,
-                    y=y_values,
-                    pen=pg.mkPen(color, width=1.5),
-                    symbol=None
-                )
-                plot2.addItem(line)
-                
+                # Add ONLY scatter plot (no lines)
                 scatter = pg.ScatterPlotItem(
                     x=x_vals, 
                     y=y_values,
-                    pen=None,
+                    pen=pg.mkPen(color, width=1),
                     symbol='o',
-                    size=3,
-                    brush=color
+                    size=4,
+                    brush=pg.mkBrush(*color, 180)  # Semi-transparent
                 )
                 plot2.addItem(scatter)
-                
-                legend2.addItem(line, label)
+                legend2.addItem(scatter, label)
                 param_count += 1
+            
+            # Apply log scale to right axis if needed
+            if log_right:
+                # For ViewBox, we need to apply log transform manually
+                plot2.setYRange(np.log10(plot2.viewRange()[1][0]), np.log10(plot2.viewRange()[1][1]))
         
         # Update views when plot1 changes (if using dual axes)
         if use_dual_axes and plot2 is not None:

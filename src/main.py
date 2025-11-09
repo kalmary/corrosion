@@ -44,14 +44,20 @@ def _get_plot_params() -> dict:
     Returns dict with keys: 'x_axis', 'left_axis', 'right_axis' (optional), and 'sort_x'
     """
     x_axis = input('Input x parameter name (str): ').strip()
+    sort_x = _yn_request('Sort x axis? (y/n): ')
+    log_x = _yn_request('Log scale for x axis? (y/n): ')
     
     left_axis = input('Input left axis parameter names (list[str]): ')
     left_axis = ast.literal_eval(left_axis)
+    log_left = _yn_request('Log scale for left axis? (y/n): ')  
+
     
-    sort_x = _yn_request('Sort x axis? (y/n): ')        
+      
     params = {
         'x_axis': x_axis,
+        'log_x': log_x,
         'left_axis': left_axis,
+        'log_left': log_left,
         'sort_x': sort_x
     }
     
@@ -59,7 +65,11 @@ def _get_plot_params() -> dict:
     if use_right:
         right_axis = input('Input right axis parameter names (list[str]): ')
         right_axis = ast.literal_eval(right_axis)
+
+        log_right = _yn_request('Log scale for right axis? (y/n): ')
+
         params['right_axis'] = right_axis
+        params['log_right'] = log_right
     
     return params
 
@@ -154,9 +164,12 @@ def data_loop():
                         case 6:
                                 visualiser = VisualizeData(data_obj._data, data_obj.path.stem)
                                 params2plot = _get_plot_params()
-                                sort_x = params2plot.pop('sort_x', False)
 
-                                visualiser.plot_parameters(params2plot, sort_x=sort_x)
+                                visualiser.plot_parameters(params2plot, 
+                                                           sort_x=params2plot.pop('sort_x', False),
+                                                           log_x=params2plot.get('log_x', False),
+                                                           log_left=params2plot.get('log_left', False),
+                                                           log_right=params2plot.get('log_right', False))
                                 
                                 
                         case 7:
