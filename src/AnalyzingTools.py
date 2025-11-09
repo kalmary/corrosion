@@ -244,7 +244,7 @@ class VisualizeData:
         self.data_name = data_name
 
     def plot_parameters(self, params_dict: Optional[dict] = None, sort_x: bool = False, 
-                    log_x: bool = False, log_left: bool = False, log_right: bool = False) -> None:
+                        log_x: bool = False, log_left: bool = False, log_right: bool = False) -> None:
         """
         Plot parameters with interactive controls using PyQtGraph.
         
@@ -257,7 +257,7 @@ class VisualizeData:
             log_left: Whether to use logarithmic scale for left y-axis
             log_right: Whether to use logarithmic scale for right y-axis
         """
-    
+        
         # Handle default case - plot all numeric columns vs index
         if params_dict is None:
             numeric_cols = list(self.data.select_dtypes(include=[np.number]).columns)
@@ -303,11 +303,11 @@ class VisualizeData:
             axis = pg.DateAxisItem(orientation='bottom')
             plot1.setAxisItems({'bottom': axis})
         
-        # Set logarithmic scales
+        # Set logarithmic scales for left axis using setLogMode
         if log_x and not has_datetime:
             plot1.setLogMode(x=True, y=False)
         if log_left:
-            plot1.setLogMode(x=plot1.ctrl.logXCheck.isChecked() if hasattr(plot1, 'ctrl') else log_x, y=True)
+            plot1.setLogMode(x=log_x and not has_datetime, y=True)
         
         # Set black color for axes, labels, and ticks on white background
         plot1.getAxis('bottom').setPen('k')
@@ -339,7 +339,7 @@ class VisualizeData:
             
             right_label = 'Right Axis'
             if log_right:
-                right_label += " (log scale)"
+                right_label += " (log scale - manual transform)"
             plot1.getAxis('right').setLabel(right_label)
             plot1.getAxis('right').setPen('k')
             plot1.getAxis('right').setTextPen('k')
@@ -361,6 +361,7 @@ class VisualizeData:
             legend2.setZValue(100)
         else:
             legend1 = plot1.addLegend(offset=(70, 10))
+            legend1.setParentItem(plot1.graphicsItem())
             legend1.setBrush((255, 255, 255))
             legend1.setPen(pg.mkPen('k', width=2))
             legend1.setLabelTextSize('10pt')
@@ -476,6 +477,11 @@ class VisualizeData:
                     x_vals = x_vals[valid_mask]
                     y_values = y_values[valid_mask]
                 
+                # IMPORTANT: For right axis (ViewBox), manually transform to log scale
+                # ViewBox doesn't support setLogMode(), so we transform the data directly
+                if log_right:
+                    y_values = np.log10(y_values)
+                
                 if sort_x and x_param is not None:
                     sort_idx = np.argsort(x_vals)
                     x_vals = x_vals[sort_idx]
@@ -498,11 +504,6 @@ class VisualizeData:
                 plot2.addItem(scatter)
                 legend2.addItem(scatter, label)
                 param_count += 1
-            
-            # Apply log scale to right axis if needed
-            if log_right:
-                # For ViewBox, we need to apply log transform manually
-                plot2.setYRange(np.log10(plot2.viewRange()[1][0]), np.log10(plot2.viewRange()[1][1]))
         
         # Update views when plot1 changes (if using dual axes)
         if use_dual_axes and plot2 is not None:
