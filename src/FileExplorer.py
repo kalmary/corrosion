@@ -30,7 +30,7 @@ def pick_file(title: str = "Choose a data file",
     if initial_dir is None:
         start_dir = pth.Path(__file__).parent.parent.joinpath('data')
     elif isinstance(initial_dir, str):
-        start_dir = Path(initial_dir)
+        start_dir = pth.Path(initial_dir)
     else:
         start_dir = initial_dir
 

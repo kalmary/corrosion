@@ -482,6 +482,32 @@ class VisualizeData:
         if app is not None:
             app.exec_()
 
+    def view_dataframe(self):
+        #main window
+        root = tk.Tk()
+        if self.data_name is not None:
+            root.title(f"Data loaded from: {self.data_name}")
+
+        #window size
+        root.geometry("1000x600") 
+
+
+        frame = tk.Frame(root)
+        frame.pack(fill='both', expand=True)
+
+        pt = Table(frame, 
+                   dataframe=self.data,
+                   showtoolbar=True,  # toolbar on top
+                   showstatusbar=True) # status barr bottom
+
+        # enable resize and scroll
+        pt.autoResizeColumns()
+        
+
+        # display
+        pt.show() 
+        root.mainloop()
+
     def sort_cols(self, x, y) -> tuple[np.array, np.array]:
         x = np.asarray(x)
         y = np.asarray(y)

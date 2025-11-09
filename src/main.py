@@ -3,6 +3,7 @@ from typing import Union, Optional
 import pandas as pd
 
 import ast
+import sys
 
 from AnalyzingTools import CorrosionData, VisualizeData
 from FileExplorer import pick_file
@@ -23,6 +24,20 @@ def loadRawData(path: Union[str, pth.Path]) -> CorrosionData:
 
         return data_obj
 
+def _yn_request(prompt: str) -> bool:
+    """
+    Prompt user for a yes/no input and return True for 'y' and False for 'n'.
+    Keeps asking until valid input is received.
+    """
+    while True:
+        response = input(prompt).strip().lower()
+        if response == 'y':
+            return True
+        elif response == 'n':
+            return False
+        else:
+            print("Invalid input. Please enter 'y' or 'n'.")
+
 def _get_plot_params() -> dict:
     """
     Get plot parameters from user input.
@@ -33,15 +48,14 @@ def _get_plot_params() -> dict:
     left_axis = input('Input left axis parameter names (list[str]): ')
     left_axis = ast.literal_eval(left_axis)
     
-    sort_x = input('Sort by x values? (y/n): ').strip().lower() == 'y'
-    
+    sort_x = _yn_request('Sort x axis? (y/n): ')        
     params = {
         'x_axis': x_axis,
         'left_axis': left_axis,
         'sort_x': sort_x
     }
     
-    use_right = input('Use right axis? (y/n): ').strip().lower() == 'y'
+    use_right = _yn_request('Add right axis? (y/n): ')
     if use_right:
         right_axis = input('Input right axis parameter names (list[str]): ')
         right_axis = ast.literal_eval(right_axis)
@@ -49,8 +63,11 @@ def _get_plot_params() -> dict:
     
     return params
 
-def load_data() -> tuple[pd.DataFrame, pd.DataFrame]:
-        path: pth.Path = pick_file()
+def load_data() -> tuple[CorrosionData, CorrosionData]:
+        path = pick_file()
+        if path is None:
+                print('No file selected. Exiting...')
+                sys.exit()
         data_obj = loadRawData(path)
         data_obj0 = data_obj.deepcopy()
 
